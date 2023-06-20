@@ -1,0 +1,59 @@
+name: Build Docker Image
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      REGISTRY_IMAGE: xczh/code-server
+      CODE_VERSION:
+    steps:
+      -
+        name: Checkout
+        uses: actions/checkout@v3
+      -
+        name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
+      -
+        name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+      -
+        name: Login to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - 
+        name: Find code-server Latest Release
+        run: |
+          CODE_VERSION=$(curl -sX GET https://api.github.com/repos/coder/code-server/releases/latest | awk '/tag_name/{print $4;exit}' FS='[""]' | sed 's|^v||')
+          echo "CODE_VERSION=${CODE_VERSION}" >> "$GITHUB_ENV"
+      -
+        name: Build slim and push
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64,linux/arm/v7
+          build-args: |
+            CODE_VERSION=${{ env.CODE_VERSION }}
+          target: slim
+          tags: "${{ env.REGISTRY_IMAGE }}:${{ env.CODE_VERSION }}-slim"
+          push: true
+      -
+        name: Build full and push
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64,linux/arm/v7
+          build-args: |
+            CODE_VERSION=${{ env.CODE_VERSION }}
+          target: full
+          tags: "${{ env.REGISTRY_IMAGE }}:${{ env.CODE_VERSION }}-full"
+          push: true
