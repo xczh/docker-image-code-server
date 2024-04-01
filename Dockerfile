@@ -27,7 +27,7 @@ RUN apt-get update && \
         file \
         git \
         git-lfs \
-        gpg \
+        gnupg \
         htop \
         iproute2 \
         iputils-ping \
