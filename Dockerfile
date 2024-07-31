@@ -73,13 +73,17 @@ RUN apt-get update && \
     apt-get clean -y && \
     apt-get autoremove -y && \
     rm -rf /var/lib/apt/lists/* /var/tmp/* /var/log/* /tmp/* /root/.cache && \
-    adduser --uid 1000 --gecos '' --disabled-password coder && \
-    echo "coder ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers.d/nopasswd && \
-    chown -R coder:coder /volume
+#
+# Fix: Since Ubuntu 24.04, user 'ubuntu' become the default user as uid '1000',
+#      so we no more need this.
+#   adduser --uid 1000 --gecos '' --disabled-password coder && \
+#
+    echo "ubuntu ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers.d/nopasswd && \
+    chown -R 1000:1000 /volume
 
 WORKDIR /volume/workspace
 
-USER coder
+USER ubuntu
 
 # Warn: If any build steps change the data within the volume after VOLUME has been declared, 
 #       those changes will be discarded.
@@ -148,11 +152,11 @@ RUN sudo apt-get update && \
         libxrender1; \
       curl -sSL -o /tmp/miniconda3.sh https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-${MINICONDA3_ARCH}.sh; \
       bash /tmp/miniconda3.sh -b; \
-      bash -c 'source /home/coder/miniconda3/bin/activate && conda init && conda config --set auto_activate_base False && conda info && conda clean -afy'; \
-      find /home/coder/miniconda3/ -follow -type f -name '*.a' -delete; \
-      find /home/coder/miniconda3/ -follow -type f -name '*.js.map' -delete; \
+      bash -c 'source /home/ubuntu/miniconda3/bin/activate && conda init && conda config --set auto_activate_base False && conda info && conda clean -afy'; \
+      find /home/ubuntu/miniconda3/ -follow -type f -name '*.a' -delete; \
+      find /home/ubuntu/miniconda3/ -follow -type f -name '*.js.map' -delete; \
     fi && \
 # Cleanup
     sudo apt-get clean -y && \
     sudo apt-get autoremove -y && \
-    sudo rm -rf /var/lib/apt/lists/* /var/tmp/* /var/log/* /tmp/* /root/.cache /home/coder/.rustup/tmp/*
+    sudo rm -rf /var/lib/apt/lists/* /var/tmp/* /var/log/* /tmp/* /root/.cache /home/ubuntu/.rustup/tmp/*
