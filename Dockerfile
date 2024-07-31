@@ -2,7 +2,7 @@
 # Stage 1: Build Essential
 ##############################################
 
-FROM ubuntu:22.04 AS slim
+FROM ubuntu:24.04 AS slim
 
 LABEL maintainer.name="xczh" \
       maintainer.email="xczh.me@foxmail.com" \
