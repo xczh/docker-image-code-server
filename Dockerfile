@@ -2,7 +2,7 @@
 # Stage 1: Build Essential
 ##############################################
 
-FROM ubuntu:24.04 AS slim
+FROM ubuntu:26.04 AS slim
 
 LABEL maintainer.name="xczh" \
       maintainer.email="xczh.me@foxmail.com" \
@@ -15,7 +15,9 @@ ARG CODE_VERSION
 SHELL ["/bin/bash", "-c", "-eux", "-o", "pipefail"]
 
 # Notice: you can pass env $HASHED_PASSWORD at runtime.
-ENV LANG=en_US.UTF-8 PASSWORD=hello_coder CODE_ARGS=
+ENV LANG=en_US.UTF-8 \
+    PASSWORD=hello_coder \
+    CODE_ARGS=""
 
 RUN apt-get update && \
     LANG=C.UTF-8 DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends -o=Dpkg::Use-Pty=0 \
@@ -85,19 +87,21 @@ WORKDIR /volume/workspace
 
 USER ubuntu
 
-# Warn: If any build steps change the data within the volume after VOLUME has been declared, 
-#       those changes will be discarded.
-VOLUME /volume
-
 EXPOSE 8080/tcp
 
 HEALTHCHECK --start-period=10s --interval=60s --timeout=5s --retries=3 \
-  CMD grep -q -- '--cert' /proc/1/cmdline && { curl -f --insecure https://127.0.0.1:8080/healthz || exit 1; } || { curl -f http://127.0.0.1:8080/healthz || exit 1; }
+  CMD curl -f http://127.0.0.1:8080/healthz || curl -f --insecure https://127.0.0.1:8080/healthz || exit 1
 
 # Notice: before run, ensure volume path permission:
 #     chown -R 1000:1000 /path/to/host/volume
-CMD /app/bin/code-server --disable-telemetry --bind-addr 0.0.0.0:8080 --auth password --user-data-dir /volume/data --extensions-dir /volume/extensions ${CODE_ARGS} /volume/workspace
-
+CMD exec /app/bin/code-server \
+    --disable-telemetry \
+    --bind-addr 0.0.0.0:8080 \
+    --auth password \
+    --user-data-dir /volume/data \
+    --extensions-dir /volume/extensions \
+    ${CODE_ARGS} \
+    /volume/workspace
 
 ##############################################
 # Stage 2: Full Development Environment
@@ -130,7 +134,10 @@ RUN sudo apt-get update && \
 # Tier 1: x86_64-unknown-linux-gnu, aarch64-unknown-linux-gnu
 # Tier 2: armv7-unknown-linux-gnueabihf
 # See: https://doc.rust-lang.org/nightly/rustc/platform-support.html
-    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal && \
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && \
+    ~/.cargo/bin/rustup component add \
+        rust-analyzer \
+        rust-src && \
     ~/.cargo/bin/rustup --version && \
     ~/.cargo/bin/cargo --version && \
     ~/.cargo/bin/rustc --version && \
