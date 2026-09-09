@@ -78,6 +78,14 @@ RUN apt-get update && \
     curl -o /tmp/code-server.tar.gz -L "${CODE_SERVER_URL}" && \
     mkdir -p /app /volume/data /volume/extensions /volume/workspace && \
     tar -xvf /tmp/code-server.tar.gz -C /app --strip-components=1 && \
+# Add user(uid:1000)
+#
+# Fix: Since Ubuntu 24.04, user 'ubuntu' become the default user as uid '1000',
+#      so we no more need this.
+#   adduser --uid 1000 --gecos '' --disabled-password coder && \
+#
+    echo "ubuntu ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers.d/nopasswd && \
+    chown -R 1000:1000 /volume && \
 # Pre-install extensions
     su - ubuntu -c " \
         /app/bin/code-server --extensions-dir /volume/extensions \
@@ -91,14 +99,7 @@ RUN apt-get update && \
 # Cleanup
     apt-get clean -y && \
     apt-get autoremove -y && \
-    rm -rf /var/lib/apt/lists/* /var/tmp/* /var/log/* /tmp/* /root/.cache && \
-#
-# Fix: Since Ubuntu 24.04, user 'ubuntu' become the default user as uid '1000',
-#      so we no more need this.
-#   adduser --uid 1000 --gecos '' --disabled-password coder && \
-#
-    echo "ubuntu ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers.d/nopasswd && \
-    chown -R 1000:1000 /volume
+    rm -rf /var/lib/apt/lists/* /var/tmp/* /var/log/* /tmp/* /root/.cache
 
 WORKDIR /volume/workspace
 
