@@ -19,36 +19,114 @@ jobs:
         run: |
           CODE_VERSION=$(curl -sX GET https://api.github.com/repos/coder/code-server/releases/latest | jq -r '.tag_name' | sed 's|^v||')
           echo "code_version=${CODE_VERSION}" >> "$GITHUB_OUTPUT"
-
-  build-slim:
+          
+# ==========================================
+# AMD64 Pipeline
+# ==========================================
+  build-slim-amd64:
     needs: get-version
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        arch: [amd64, arm64]
     steps:
       - uses: actions/checkout@v6
-      - uses: docker/setup-qemu-action@v4
       - uses: docker/setup-buildx-action@v4
       - uses: docker/login-action@v4
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-      - name: Build & Push Slim (${{ matrix.arch }})
+      - name: Build & Push Slim (amd64)
         uses: docker/build-push-action@v7
         with:
           context: .
           target: slim
-          platforms: linux/${{ matrix.arch }}
+          platforms: linux/amd64
           build-args: |
             CODE_VERSION=${{ needs.get-version.outputs.code_version }}
-          tags: ${{ env.REGISTRY_IMAGE }}:${{ needs.get-version.outputs.code_version }}-slim-${{ matrix.arch }}
+          tags: ${{ env.REGISTRY_IMAGE }}:${{ needs.get-version.outputs.code_version }}-slim-amd64
           push: true
-          cache-from: type=gha,scope=slim-${{ matrix.arch }}
-          cache-to: type=gha,mode=max,scope=slim-${{ matrix.arch }}
+          cache-from: type=gha,scope=slim-amd64
+          cache-to: type=gha,mode=max,scope=slim-amd64
 
+  build-full-amd64:
+    needs: [get-version, build-slim-amd64]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}  
+      - name: Build & Push Full (amd64)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: full
+          platforms: linux/amd64
+          build-args: |
+            CODE_VERSION=${{ needs.get-version.outputs.code_version }}
+          tags: ${{ env.REGISTRY_IMAGE }}:${{ needs.get-version.outputs.code_version }}-full-amd64
+          push: true
+          cache-from: |
+            type=gha,scope=full-amd64
+            type=gha,scope=slim-amd64
+          cache-to: type=gha,mode=max,scope=full-amd64
+
+# ==========================================
+# ARM64 Pipeline
+# ==========================================
+  build-slim-arm64:
+    needs: get-version
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v6
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Build & Push Slim (arm64)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: slim
+          platforms: linux/arm64
+          build-args: |
+            CODE_VERSION=${{ needs.get-version.outputs.code_version }}
+          tags: ${{ env.REGISTRY_IMAGE }}:${{ needs.get-version.outputs.code_version }}-slim-arm64
+          push: true
+          cache-from: type=gha,scope=slim-arm64
+          cache-to: type=gha,mode=max,scope=slim-arm64
+
+  build-full-arm64:
+    needs: [get-version, build-slim-arm64]
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v6
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}  
+      - name: Build & Push Full (arm64)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: full
+          platforms: linux/arm64
+          build-args: |
+            CODE_VERSION=${{ needs.get-version.outputs.code_version }}
+          tags: ${{ env.REGISTRY_IMAGE }}:${{ needs.get-version.outputs.code_version }}-full-arm64
+          push: true
+          cache-from: |
+            type=gha,scope=full-arm64
+            type=gha,scope=slim-arm64
+          cache-to: type=gha,mode=max,scope=full-arm64
+
+# ==========================================
+# Manifest Merge
+# ==========================================
   manifest-slim:
-    needs: [get-version, build-slim]
+    needs: [get-version, build-slim-amd64, build-slim-arm64]
     runs-on: ubuntu-latest
     steps:
       - uses: docker/setup-buildx-action@v4
@@ -64,37 +142,8 @@ jobs:
             ${{ env.REGISTRY_IMAGE }}:${VER}-slim-amd64 \
             ${{ env.REGISTRY_IMAGE }}:${VER}-slim-arm64
 
-  build-full:
-    needs: [get-version, build-slim]
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        arch: [amd64, arm64]
-    steps:
-      - uses: actions/checkout@v6
-      - uses: docker/setup-qemu-action@v4
-      - uses: docker/setup-buildx-action@v4
-      - uses: docker/login-action@v4
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}  
-      - name: Build & Push Full (${{ matrix.arch }})
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          target: full
-          platforms: linux/${{ matrix.arch }}
-          build-args: |
-            CODE_VERSION=${{ needs.get-version.outputs.code_version }}
-          tags: ${{ env.REGISTRY_IMAGE }}:${{ needs.get-version.outputs.code_version }}-full-${{ matrix.arch }}
-          push: true
-          cache-from: |
-            type=gha,scope=full-${{ matrix.arch }}
-            type=gha,scope=slim-${{ matrix.arch }}
-          cache-to: type=gha,mode=max,scope=full-${{ matrix.arch }}
-
   manifest-full:
-    needs: [get-version, build-full]
+    needs: [get-version, build-full-amd64, build-full-arm64]
     runs-on: ubuntu-latest
     steps:
       - uses: docker/setup-buildx-action@v4
