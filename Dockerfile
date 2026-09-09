@@ -16,7 +16,13 @@ SHELL ["/bin/bash", "-c", "-eux", "-o", "pipefail"]
 
 # Notice: you can pass env $HASHED_PASSWORD at runtime.
 ENV LANG=en_US.UTF-8 \
-    PASSWORD=hello_coder \
+    PASSWORD=password \
+    EXTENSIONS_GALLERY='{ \
+        "serviceUrl": "https://marketplace.visualstudio.com/_apis/public/gallery", \
+        "itemUrl": "https://marketplace.visualstudio.com/items", \
+        "resourceUrlTemplate": "https://{publisher}.vscode-unpkg.net/{publisher}/{name}/{version}/{path}", \
+        "controlUrl": "" \
+    }' \
     CODE_ARGS=""
 
 RUN apt-get update && \
@@ -64,7 +70,7 @@ RUN apt-get update && \
     update-locale LANG=en_US.UTF-8 && \
     if [ -z "${CODE_VERSION}" ]; then \
       CODE_VERSION=$(curl -sX GET https://api.github.com/repos/coder/code-server/releases/latest \
-        | awk '/tag_name/{print $4;exit}' FS='[""]' | sed 's|^v||'); \
+        | jq -r '.tag_name' | sed 's|^v||'); \
     fi && \
     CODE_ARCH=$([ "${TARGETARCH}" = "arm" ] && echo -n "armv7l" || echo -n "${TARGETARCH}") && \
     CODE_SERVER_URL="https://github.com/coder/code-server/releases/download/v${CODE_VERSION}/code-server-${CODE_VERSION}-${TARGETOS}-${CODE_ARCH}.tar.gz" && \
@@ -72,6 +78,17 @@ RUN apt-get update && \
     curl -o /tmp/code-server.tar.gz -L "${CODE_SERVER_URL}" && \
     mkdir -p /app /volume/data /volume/extensions /volume/workspace && \
     tar -xvf /tmp/code-server.tar.gz -C /app --strip-components=1 && \
+# Pre-install extensions
+    su - ubuntu -c " \
+        /app/bin/code-server --extensions-dir /volume/extensions \
+            --install-extension MS-CEINTL.vscode-language-pack-zh-hans \
+            --install-extension Tyriar.theme-sapphire \
+            --install-extension ritwickdey.LiveServer \
+            --install-extension DavidAnson.vscode-markdownlint \
+            --install-extension yzhang.markdown-all-in-one \
+            --install-extension bierner.markdown-mermaid \
+    " && \
+# Cleanup
     apt-get clean -y && \
     apt-get autoremove -y && \
     rm -rf /var/lib/apt/lists/* /var/tmp/* /var/log/* /tmp/* /root/.cache && \
@@ -96,7 +113,7 @@ HEALTHCHECK --start-period=10s --interval=60s --timeout=5s --retries=3 \
 #     chown -R 1000:1000 /path/to/host/volume
 CMD exec /app/bin/code-server \
     --disable-telemetry \
-    --bind-addr 0.0.0.0:8080 \
+    --bind-addr "[::]:8080" \
     --auth password \
     --user-data-dir /volume/data \
     --extensions-dir /volume/extensions \
@@ -119,6 +136,9 @@ RUN sudo apt-get update && \
       && \
     gcc --version && \
     g++ --version && \
+    /app/bin/code-server --extensions-dir /volume/extensions \
+        --install-extension ms-vscode.cpptools \
+    && \
 # Go
 # Support platform: linux/amd64, linux/arm64, linux/armv6l
     GOLANG_ARCH=$([ "${TARGETARCH}" = "arm" ] && echo -n "armv6l" || echo -n "${TARGETARCH}") && \
@@ -128,6 +148,9 @@ RUN sudo apt-get update && \
     curl -sSL -o /tmp/golang.tar.gz "${GOLANG_URL}" && \
     sudo tar -zxf /tmp/golang.tar.gz -C /usr/local && \
     echo 'case ":${PATH}:" in *:"/usr/local/go/bin":*) ;; *) export PATH="/usr/local/go/bin:$PATH";; esac' >> ~/.bashrc && \
+    /app/bin/code-server --extensions-dir /volume/extensions \
+        --install-extension golang.go \
+    && \
     /usr/local/go/bin/go version && \
 # Rust
 # Support platform: 
@@ -137,7 +160,12 @@ RUN sudo apt-get update && \
     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && \
     ~/.cargo/bin/rustup component add \
         rust-analyzer \
-        rust-src && \
+        rust-src \
+    && \
+    /app/bin/code-server --extensions-dir /volume/extensions \
+        --install-extension rust-lang.rust-analyzer \
+        --install-extension tamasfe.even-better-toml \
+    && \
     ~/.cargo/bin/rustup --version && \
     ~/.cargo/bin/cargo --version && \
     ~/.cargo/bin/rustc --version && \
@@ -163,6 +191,10 @@ RUN sudo apt-get update && \
       find /home/ubuntu/miniconda3/ -follow -type f -name '*.a' -delete; \
       find /home/ubuntu/miniconda3/ -follow -type f -name '*.js.map' -delete; \
     fi && \
+    /app/bin/code-server --extensions-dir /volume/extensions \
+        --install-extension ms-python.python \
+        --install-extension ms-python.vscode-python-envs \
+    && \
 # Cleanup
     sudo apt-get clean -y && \
     sudo apt-get autoremove -y && \
