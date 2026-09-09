@@ -5,56 +5,108 @@ on:
   push:
     branches:
       - main
-  pull_request:
-    branches:
-      - main
+
+env:
+  REGISTRY_IMAGE: xczh/code-server
 
 jobs:
-  build:
+  get-version:
     runs-on: ubuntu-latest
-    env:
-      REGISTRY_IMAGE: xczh/code-server
-      CODE_VERSION:
+    outputs:
+      code_version: ${{ steps.version.outputs.code_version }}
     steps:
-      -
-        name: Checkout
-        uses: actions/checkout@v6
-      -
-        name: Set up QEMU
-        uses: docker/setup-qemu-action@v4
-      -
-        name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-      -
-        name: Login to Docker Hub
-        uses: docker/login-action@v4
+      - id: version
+        run: |
+          CODE_VERSION=$(curl -sX GET https://api.github.com/repos/coder/code-server/releases/latest | jq -r '.tag_name' | sed 's|^v||')
+          echo "code_version=${CODE_VERSION}" >> "$GITHUB_OUTPUT"
+
+  build-slim:
+    needs: get-version
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-      - 
-        name: Find code-server Latest Release
-        run: |
-          CODE_VERSION=$(curl -sX GET https://api.github.com/repos/coder/code-server/releases/latest | awk '/tag_name/{print $4;exit}' FS='[""]' | sed 's|^v||')
-          echo "CODE_VERSION=${CODE_VERSION}" >> "$GITHUB_ENV"
-      -
-        name: Build slim and push
+      - name: Build & Push Slim (${{ matrix.arch }})
         uses: docker/build-push-action@v7
         with:
           context: .
-          platforms: linux/amd64,linux/arm64
-          build-args: |
-            CODE_VERSION=${{ env.CODE_VERSION }}
           target: slim
-          tags: "${{ env.REGISTRY_IMAGE }}:${{ env.CODE_VERSION }}-slim"
+          platforms: linux/${{ matrix.arch }}
+          build-args: |
+            CODE_VERSION=${{ needs.get-version.outputs.code_version }}
+          tags: ${{ env.REGISTRY_IMAGE }}:${{ needs.get-version.outputs.code_version }}-slim-${{ matrix.arch }}
           push: true
-      -
-        name: Build full and push
+          cache-from: type=gha,scope=slim-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=slim-${{ matrix.arch }}
+
+  manifest-slim:
+    needs: [get-version, build-slim]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Create & Push Slim Multi-Arch Manifest
+        run: |
+          VER="${{ needs.get-version.outputs.code_version }}"
+          docker buildx imagetools create -t ${{ env.REGISTRY_IMAGE }}:${VER}-slim \
+                                          -t ${{ env.REGISTRY_IMAGE }}:slim \
+            ${{ env.REGISTRY_IMAGE }}:${VER}-slim-amd64 \
+            ${{ env.REGISTRY_IMAGE }}:${VER}-slim-arm64
+
+  build-full:
+    needs: [get-version, build-slim]
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}  
+      - name: Build & Push Full (${{ matrix.arch }})
         uses: docker/build-push-action@v7
         with:
           context: .
-          platforms: linux/amd64,linux/arm64
-          build-args: |
-            CODE_VERSION=${{ env.CODE_VERSION }}
           target: full
-          tags: "${{ env.REGISTRY_IMAGE }}:${{ env.CODE_VERSION }}-full"
+          platforms: linux/${{ matrix.arch }}
+          build-args: |
+            CODE_VERSION=${{ needs.get-version.outputs.code_version }}
+          tags: ${{ env.REGISTRY_IMAGE }}:${{ needs.get-version.outputs.code_version }}-full-${{ matrix.arch }}
           push: true
+          cache-from: |
+            type=gha,scope=full-${{ matrix.arch }}
+            type=gha,scope=slim-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=full-${{ matrix.arch }}
+
+  manifest-full:
+    needs: [get-version, build-full]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Create & Push Full Multi-Arch Manifest
+        run: |
+          VER="${{ needs.get-version.outputs.code_version }}"
+          docker buildx imagetools create -t ${{ env.REGISTRY_IMAGE }}:${VER}-full \
+                                          -t ${{ env.REGISTRY_IMAGE }}:full \
+                                          -t ${{ env.REGISTRY_IMAGE }}:latest \
+            ${{ env.REGISTRY_IMAGE }}:${VER}-full-amd64 \
+            ${{ env.REGISTRY_IMAGE }}:${VER}-full-arm64
