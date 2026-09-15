@@ -69,13 +69,12 @@ RUN apt-get update && \
     locale-gen en_US.UTF-8 zh_CN.UTF-8 && \
     update-locale LANG=en_US.UTF-8 && \
     if [ -z "${CODE_VERSION}" ]; then \
-      CODE_VERSION=$(curl -sX GET https://api.github.com/repos/coder/code-server/releases/latest \
-        | jq -r '.tag_name' | sed 's|^v||'); \
+      CODE_VERSION=$(curl -sX GET https://api.github.com/repos/coder/code-server/releases/latest | jq -r '.tag_name' | sed 's|^v||'); \
     fi && \
     CODE_ARCH=$([ "${TARGETARCH}" = "arm" ] && echo -n "armv7l" || echo -n "${TARGETARCH}") && \
     CODE_SERVER_URL="https://github.com/coder/code-server/releases/download/v${CODE_VERSION}/code-server-${CODE_VERSION}-${TARGETOS}-${CODE_ARCH}.tar.gz" && \
     echo "Download code-server from ${CODE_SERVER_URL} ..." && \
-    curl -o /tmp/code-server.tar.gz -L "${CODE_SERVER_URL}" && \
+    curl -sSL -o /tmp/code-server.tar.gz "${CODE_SERVER_URL}" && \
     mkdir -p /app /volume/data /volume/extensions /volume/workspace && \
     tar -xvf /tmp/code-server.tar.gz -C /app --strip-components=1 && \
 # Add user(uid:1000)
@@ -88,18 +87,22 @@ RUN apt-get update && \
     chown -R 1000:1000 /volume && \
 # Pre-install extensions
     su - ubuntu -c " \
-        /app/bin/code-server --extensions-dir /volume/extensions \
-            --install-extension MS-CEINTL.vscode-language-pack-zh-hans \
-            --install-extension Tyriar.theme-sapphire \
-            --install-extension ritwickdey.LiveServer \
-            --install-extension DavidAnson.vscode-markdownlint \
-            --install-extension yzhang.markdown-all-in-one \
-            --install-extension bierner.markdown-mermaid \
+      /app/bin/code-server --extensions-dir /volume/extensions \
+        --install-extension Tyriar.theme-sapphire \
+        --install-extension ritwickdey.LiveServer \
+        --install-extension DavidAnson.vscode-markdownlint \
+        --install-extension yzhang.markdown-all-in-one \
+        --install-extension bierner.markdown-mermaid \
+        && \
+# Bug fix: vscode-language-pack cannot install from cmd, see: https://github.com/coder/code-server/issues/7141
+# Currently, the VSIX file must be manually installed using the WebUI.
+      curl -sSL -o /home/ubuntu/ms-ceintl.vscode-language-pack-zh-hans-latest.vsix \
+        https://MS-CEINTL.gallery.vsassets.io/_apis/public/gallery/publisher/MS-CEINTL/extension/vscode-language-pack-zh-hans/latest/assetbyname/Microsoft.VisualStudio.Services.VSIXPackage
     " && \
 # Cleanup
     apt-get clean -y && \
     apt-get autoremove -y && \
-    rm -rf /var/lib/apt/lists/* /var/tmp/* /var/log/* /tmp/* /root/.cache
+    rm -rf /var/lib/apt/lists/* /var/tmp/* /var/log/* /tmp/* /root/.cache /home/ubuntu/.cache
 
 WORKDIR /volume/workspace
 
@@ -113,13 +116,13 @@ HEALTHCHECK --start-period=10s --interval=60s --timeout=5s --retries=3 \
 # Notice: before run, ensure volume path permission:
 #     chown -R 1000:1000 /path/to/host/volume
 CMD exec /app/bin/code-server \
-    --disable-telemetry \
-    --bind-addr "[::]:8080" \
-    --auth password \
-    --user-data-dir /volume/data \
-    --extensions-dir /volume/extensions \
-    ${CODE_ARGS} \
-    /volume/workspace
+      --disable-telemetry \
+      --bind-addr "[::]:8080" \
+      --auth password \
+      --user-data-dir /volume/data \
+      --extensions-dir /volume/extensions \
+      ${CODE_ARGS} \
+      /volume/workspace
 
 ##############################################
 # Stage 2: Full Development Environment
@@ -138,7 +141,7 @@ RUN sudo apt-get update && \
     gcc --version && \
     g++ --version && \
     /app/bin/code-server --extensions-dir /volume/extensions \
-        --install-extension ms-vscode.cpptools \
+      --install-extension ms-vscode.cpptools \
     && \
 # Go
 # Support platform: linux/amd64, linux/arm64, linux/armv6l
@@ -150,8 +153,13 @@ RUN sudo apt-get update && \
     sudo tar -zxf /tmp/golang.tar.gz -C /usr/local && \
     echo 'case ":${PATH}:" in *:"/usr/local/go/bin":*) ;; *) export PATH="/usr/local/go/bin:$PATH";; esac' >> ~/.bashrc && \
     /app/bin/code-server --extensions-dir /volume/extensions \
-        --install-extension golang.go \
+      --install-extension golang.go \
     && \
+# golang.go extension dependencies
+    /usr/local/go/bin/go install -v github.com/josharian/impl@latest && \
+    /usr/local/go/bin/go install -v github.com/haya14busa/goplay/cmd/goplay@latest && \
+    /usr/local/go/bin/go install -v github.com/go-delve/delve/cmd/dlv@latest && \
+    /usr/local/go/bin/go install -v golang.org/x/tools/gopls@latest && \
     /usr/local/go/bin/go version && \
 # Rust
 # Support platform: 
@@ -164,8 +172,8 @@ RUN sudo apt-get update && \
         rust-src \
     && \
     /app/bin/code-server --extensions-dir /volume/extensions \
-        --install-extension rust-lang.rust-analyzer \
-        --install-extension tamasfe.even-better-toml \
+      --install-extension rust-lang.rust-analyzer \
+      --install-extension tamasfe.even-better-toml \
     && \
     ~/.cargo/bin/rustup --version && \
     ~/.cargo/bin/cargo --version && \
@@ -193,10 +201,9 @@ RUN sudo apt-get update && \
       find /home/ubuntu/miniconda3/ -follow -type f -name '*.js.map' -delete; \
     fi && \
     /app/bin/code-server --extensions-dir /volume/extensions \
-        --install-extension ms-python.python \
-        --install-extension ms-python.vscode-python-envs \
+      --install-extension ms-python.python \
     && \
 # Cleanup
     sudo apt-get clean -y && \
     sudo apt-get autoremove -y && \
-    sudo rm -rf /var/lib/apt/lists/* /var/tmp/* /var/log/* /tmp/* /root/.cache /home/ubuntu/.rustup/tmp/*
+    sudo rm -rf /var/lib/apt/lists/* /var/tmp/* /var/log/* /tmp/* /root/.cache /home/ubuntu/.cache /home/ubuntu/.rustup/tmp/*
