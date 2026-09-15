@@ -97,7 +97,7 @@ RUN apt-get update && \
 # Bug fix: vscode-language-pack cannot install from cmd, see: https://github.com/coder/code-server/issues/7141
 # Currently, the VSIX file must be manually installed using the WebUI.
       curl -sSL -o /home/ubuntu/ms-ceintl.vscode-language-pack-zh-hans-latest.vsix \
-        https://MS-CEINTL.gallery.vsassets.io/_apis/public/gallery/publisher/MS-CEINTL/extension/vscode-language-pack-zh-hans/latest/assetbyname/Microsoft.VisualStudio.Services.VSIXPackage
+        https://MS-CEINTL.gallery.vsassets.io/_apis/public/gallery/publisher/MS-CEINTL/extension/vscode-language-pack-zh-hans/latest/assetbyname/Microsoft.VisualStudio.Services.VSIXPackage \
     " && \
 # Cleanup
     apt-get clean -y && \
