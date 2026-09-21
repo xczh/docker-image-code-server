@@ -16,7 +16,7 @@ $ sudo docker pull xczh/code-server:${tag}
 ### 运行容器
 
 可用的环境变量：
- - `PASSWORD` HTTP Basic Auth的明文密码，默认为`hello_coder`。
+ - `PASSWORD` HTTP Basic Auth的明文密码，默认为`password`。
  - `HASHED_PASSWORD` HTTP Basic Auth的密码哈希值，默认为空。如该值非空，则忽略`PASSWORD`。使用[Argon2](https://argon2.online/)算法生成。
  - `CODE_ARGS` 附加启动参数，默认为空。
 
@@ -36,8 +36,9 @@ $ sudo docker run -d --restart=unless-stopped \
                   --hostname code-server \
                   --init \
                   --cap-add SYS_PTRACE \
-                  -e PASSWORD=hello_coder \
+                  -v config:/volume/data \
+                  -v workspace:/volume/workspace \
                   -p 8080:8080 \
-                  -v ~/host-volume:/volume \
+                  -e PASSWORD=hello_coder \
                   xczh/code-server:${tag}
 ```
