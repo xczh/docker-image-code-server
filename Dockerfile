@@ -102,7 +102,18 @@ RUN apt-get update && \
 # Cleanup
     apt-get clean -y && \
     apt-get autoremove -y && \
-    rm -rf /var/lib/apt/lists/* /var/tmp/* /var/log/* /tmp/* /root/.cache /home/ubuntu/.cache
+    rm -rf /var/lib/apt/lists/* \
+      /tmp/* \
+      /var/tmp/* \
+      /var/log/* \
+      /var/cache/* \
+      /root/.cache \
+      /home/ubuntu/.cache \
+      /home/ubuntu/.local/share/code-server/CachedExtensionVSIXs/* \
+      /home/ubuntu/.local/share/code-server/CachedProfilesData/* \
+      /home/ubuntu/.local/share/code-server/coder-logs/* \
+      /home/ubuntu/.local/share/code-server/logs/* \
+      /home/ubuntu/.local/share/code-server/machineid
 
 WORKDIR /volume/workspace
 
@@ -152,6 +163,8 @@ RUN sudo apt-get update && \
     curl -sSL -o /tmp/golang.tar.gz "${GOLANG_URL}" && \
     sudo tar -zxf /tmp/golang.tar.gz -C /usr/local && \
     echo 'case ":${PATH}:" in *:"/usr/local/go/bin":*) ;; *) export PATH="/usr/local/go/bin:$PATH";; esac' >> ~/.bashrc && \
+    /usr/local/go/bin/go version && \
+    /usr/local/go/bin/go telemetry off && \
     /app/bin/code-server --extensions-dir /volume/extensions \
       --install-extension golang.go \
     && \
@@ -160,7 +173,7 @@ RUN sudo apt-get update && \
     /usr/local/go/bin/go install -v github.com/haya14busa/goplay/cmd/goplay@latest && \
     /usr/local/go/bin/go install -v github.com/go-delve/delve/cmd/dlv@latest && \
     /usr/local/go/bin/go install -v golang.org/x/tools/gopls@latest && \
-    /usr/local/go/bin/go version && \
+    /usr/local/go/bin/go clean -cache -testcache -modcache -fuzzcache && \
 # Rust
 # Support platform: 
 # Tier 1: x86_64-unknown-linux-gnu, aarch64-unknown-linux-gnu
@@ -206,4 +219,18 @@ RUN sudo apt-get update && \
 # Cleanup
     sudo apt-get clean -y && \
     sudo apt-get autoremove -y && \
-    sudo rm -rf /var/lib/apt/lists/* /var/tmp/* /var/log/* /tmp/* /root/.cache /home/ubuntu/.cache /home/ubuntu/.rustup/tmp/*
+    sudo rm -rf /var/lib/apt/lists/* \
+      /tmp/* \
+      /var/tmp/* \
+      /var/log/* \
+      /var/cache/* \
+      /root/.cache \
+      /home/ubuntu/.cache \
+      /home/ubuntu/.config/go/telemetry \
+      /home/ubuntu/.local/share/code-server/CachedExtensionVSIXs/* \
+      /home/ubuntu/.local/share/code-server/CachedProfilesData/* \
+      /home/ubuntu/.local/share/code-server/coder-logs/* \
+      /home/ubuntu/.local/share/code-server/logs/* \
+      /home/ubuntu/.local/share/code-server/machineid \
+      /home/ubuntu/.conda/*
+      
